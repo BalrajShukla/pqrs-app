@@ -1,3 +1,46 @@
+// Load local ISSN lookup databases
+let embaseData = [];
+let scopusData = [];
+
+try {
+  embaseData = require('./embase_issns.json');
+} catch (e) {
+  console.warn("embase_issns.json not found or invalid.");
+}
+
+try {
+  scopusData = require('./scopus_issns.json');
+} catch (e) {
+  console.warn("scopus_issns.json not found or invalid.");
+}
+
+// Helper function to extract and clean every ISSN from the provided JSON, 
+// regardless of whether it has one column, two columns (issn/eissn), or extra data.
+function buildMasterIssnList(dbArray) {
+  let masterSet = new Set();
+  if (!Array.isArray(dbArray)) return [];
+  
+  dbArray.forEach(row => {
+    if (typeof row === 'string') {
+      masterSet.add(row.replace(/[^0-9X]/gi, '').toUpperCase());
+    } else if (typeof row === 'object' && row !== null) {
+      Object.values(row).forEach(val => {
+        if (typeof val === 'string') {
+          // If the value looks like an ISSN (with or without hyphen), clean and add it
+          const cleanVal = val.replace(/[^0-9X]/gi, '').toUpperCase();
+          if (cleanVal.length === 8) { // standard ISSN length after removing hyphens
+            masterSet.add(cleanVal);
+          }
+        }
+      });
+    }
+  });
+  return Array.from(masterSet).filter(Boolean);
+}
+
+const embaseMasterList = buildMasterIssnList(embaseData);
+const scopusMasterList = buildMasterIssnList(scopusData);
+
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -14,6 +57,24 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // --- DETERMINISTIC ISSN INDEXING CHECK ---
+    let isScopus = "No";
+    let isEmbase = "No";
+
+    const manuscriptIssns = crossrefData?.ISSN || [];
+    const cleanManuscriptIssns = manuscriptIssns.map(issn => issn.replace(/[^0-9X]/gi, '').toUpperCase());
+
+    // Instant lookup in the combined master lists
+    if (cleanManuscriptIssns.length > 0) {
+      if (cleanManuscriptIssns.some(issn => scopusMasterList.includes(issn))) {
+        isScopus = "Yes";
+      }
+      if (cleanManuscriptIssns.some(issn => embaseMasterList.includes(issn))) {
+        isEmbase = "Yes";
+      }
+    }
+
+    // --- GEMINI EXTRACTION ---
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
 
     const promptText = `
@@ -46,8 +107,8 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 19. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
 20. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
 21. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number (e.g., "Ref 14 - Invalid DOI / Title mismatch"). If none found, state "None".
-22. "scopus": "Yes" or "No". Use the journal name and ISSN from the metadata to verify the journal's true indexing status in Scopus. Base this strictly on the journal-level indexing database, explicitly bypassing any article-level indexing lag.
-23. "embase": "Yes" or "No". Use the journal name and ISSN from the metadata to verify the journal's true indexing status in Embase. Base this strictly on the journal-level indexing database, explicitly bypassing any article-level indexing lag.
+22. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
+23. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
 `;
 
     const contents = [];
