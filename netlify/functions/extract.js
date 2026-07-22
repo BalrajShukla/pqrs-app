@@ -14,8 +14,7 @@ try {
   console.warn("scopus_issns.json not found or invalid.");
 }
 
-// Helper function to extract and clean every ISSN from the provided JSON, 
-// regardless of whether it has one column, two columns (issn/eissn), or extra data.
+// Helper function to extract and clean every ISSN from the provided JSON
 function buildMasterIssnList(dbArray) {
   let masterSet = new Set();
   if (!Array.isArray(dbArray)) return [];
@@ -26,9 +25,8 @@ function buildMasterIssnList(dbArray) {
     } else if (typeof row === 'object' && row !== null) {
       Object.values(row).forEach(val => {
         if (typeof val === 'string') {
-          // If the value looks like an ISSN (with or without hyphen), clean and add it
           const cleanVal = val.replace(/[^0-9X]/gi, '').toUpperCase();
-          if (cleanVal.length === 8) { // standard ISSN length after removing hyphens
+          if (cleanVal.length === 8) {
             masterSet.add(cleanVal);
           }
         }
@@ -40,6 +38,28 @@ function buildMasterIssnList(dbArray) {
 
 const embaseMasterList = buildMasterIssnList(embaseData);
 const scopusMasterList = buildMasterIssnList(scopusData);
+
+// Helper function to compute integer days between two date strings deterministically
+function calculateDaysBetween(dateStr1, dateStr2) {
+  if (!dateStr1 || !dateStr2 || dateStr1 === "Not reported" || dateStr2 === "Not reported") {
+    return "Not reported";
+  }
+  
+  // Clean ordinal suffixes (e.g., '12th May' -> '12 May')
+  const cleanStr1 = String(dateStr1).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim();
+  const cleanStr2 = String(dateStr2).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim();
+
+  const d1 = new Date(cleanStr1);
+  const d2 = new Date(cleanStr2);
+
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+    return "Not reported";
+  }
+
+  const diffTime = d2.getTime() - d1.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 ? diffDays : "Not reported";
+}
 
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
@@ -64,7 +84,6 @@ exports.handler = async (event, context) => {
     const manuscriptIssns = crossrefData?.ISSN || [];
     const cleanManuscriptIssns = manuscriptIssns.map(issn => issn.replace(/[^0-9X]/gi, '').toUpperCase());
 
-    // Instant lookup in the combined master lists
     if (cleanManuscriptIssns.length > 0) {
       if (cleanManuscriptIssns.some(issn => scopusMasterList.includes(issn))) {
         isScopus = "Yes";
@@ -100,15 +119,16 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 12. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
 13. "ethics_approval": State ethics approval statement with reference number. If mentioned without number state "Mentioned without approval number". If absent, state "Not reported".
 14. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-15. "received_to_accepted_days": First, explicitly locate the "Received" date and "Accepted" date printed in the manuscript. You MUST mathematically calculate the exact number of days between these two dates. Output ONLY the calculated integer (e.g., 28). If they are the exact same day, output 0. If either date is missing, output "Not reported".
-16. "accepted_to_published_days": First, explicitly locate the "Accepted" date and the "Published" (or "Available online") date in the manuscript. You MUST mathematically calculate the exact number of days between these two dates. Output ONLY the calculated integer. If they are the exact same day, output 0. If either date is missing, output "Not reported".
-17. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
-18. "funding": "Yes" or "No".
-19. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
-20. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
-21. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number (e.g., "Ref 14 - Invalid DOI / Title mismatch"). If none found, state "None".
-22. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
-23. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
+15. "received_date": Exact string of the "Received" or "Submitted" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
+16. "accepted_date": Exact string of the "Accepted" or "Revised" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
+17. "published_date": Exact string of the "Published" or "Available online" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
+18. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
+19. "funding": "Yes" or "No".
+20. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
+21. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
+22. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number (e.g., "Ref 14 - Invalid DOI / Title mismatch"). If none found, state "None".
+23. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
+24. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
 `;
 
     const contents = [];
@@ -154,6 +174,10 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 
     const jsonText = data.candidates[0].content.parts[0].text;
     const result = JSON.parse(jsonText);
+
+    // Compute integer day gaps in JavaScript
+    result.received_to_accepted_days = calculateDaysBetween(result.received_date, result.accepted_date);
+    result.accepted_to_published_days = calculateDaysBetween(result.accepted_date, result.published_date);
 
     return {
       statusCode: 200,
