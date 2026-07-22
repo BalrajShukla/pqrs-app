@@ -186,6 +186,7 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 25. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
 26. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
 27. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
+28. "scientific_syntax": "First, actively count the instances of spelling errors (ignoring standard UK/US variations), subject-verb agreement failures, and verb-tense inconsistencies. Apply this exact quantitative grading system to generate your final output: If there are 0 to 5 total errors, output exactly '[Acceptable]'. If there are 6 to 15 total errors, output exactly '[Average]'. If there are more than 15 total errors, or if the syntax is broken enough to obscure scientific meaning, output exactly '[Poor]'."
 `;
 
     const contents = [];
