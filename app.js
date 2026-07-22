@@ -19,49 +19,56 @@ const statusMessage = document.getElementById('statusMessage');
 const batchInfo = document.getElementById('batchInfo');
 const resultsBody = document.getElementById('resultsBody');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
-
-// API Key Elements
 const apiKeyInput = document.getElementById('apiKeyInput');
 const saveKeyBtn = document.getElementById('saveKeyBtn');
 
-// Initialize App & Load Databases
+// Initialize App & Robustly Load Databases from GitHub Pages
 window.addEventListener('DOMContentLoaded', async () => {
-  // Load saved API key
   const savedKey = localStorage.getItem('pqrs_gemini_key');
-  if (savedKey) {
-    apiKeyInput.value = savedKey;
-  }
+  if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  // Load local ISSN databases directly from GitHub Pages hosting
-  try {
-    const scopusRes = await fetch('./scopus_issns.json');
-    const scopusData = await scopusRes.json();
-    scopusMasterList = buildMasterIssnList(scopusData);
-  } catch (e) {
-    console.warn("Could not load Scopus database. Ensure scopus_issns.json is in the root folder.");
-  }
+  // Determine base path for GitHub Pages subfolder compatibility
+  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
   try {
-    const embaseRes = await fetch('./embase_issns.json');
-    const embaseData = await embaseRes.json();
-    embaseMasterList = buildMasterIssnList(embaseData);
+    const scopusRes = await fetch(`${basePath}scopus_issns.json`);
+    if (scopusRes.ok) {
+      const scopusData = await scopusRes.json();
+      scopusMasterList = buildMasterIssnList(scopusData);
+      console.log(`Successfully loaded ${scopusMasterList.length} Scopus ISSNs.`);
+    } else {
+      console.error("Failed to load Scopus database. HTTP Status:", scopusRes.status);
+    }
   } catch (e) {
-    console.warn("Could not load Embase database. Ensure embase_issns.json is in the root folder.");
+    console.error("Error fetching Scopus ISSNs:", e);
+  }
+
+  try {
+    const embaseRes = await fetch(`${basePath}embase_issns.json`);
+    if (embaseRes.ok) {
+      const embaseData = await embaseRes.json();
+      embaseMasterList = buildMasterIssnList(embaseData);
+      console.log(`Successfully loaded ${embaseMasterList.length} Embase ISSNs.`);
+    } else {
+      console.error("Failed to load Embase database. HTTP Status:", embaseRes.status);
+    }
+  } catch (e) {
+    console.error("Error fetching Embase ISSNs:", e);
   }
 });
 
-// Save API Key locally
-saveKeyBtn.addEventListener('click', () => {
-  const key = apiKeyInput.value.trim();
-  if (key) {
-    localStorage.setItem('pqrs_gemini_key', key);
-    alert('API Key saved securely to your browser!');
-  } else {
-    alert('Please enter a valid key.');
-  }
-});
+if (saveKeyBtn) {
+  saveKeyBtn.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    if (key) {
+      localStorage.setItem('pqrs_gemini_key', key);
+      alert('API Key saved securely!');
+    } else {
+      alert('Please enter a valid key.');
+    }
+  });
+}
 
-// Helper function to extract and clean every ISSN
 function buildMasterIssnList(dbArray) {
   let masterSet = new Set();
   if (!Array.isArray(dbArray)) return [];
@@ -80,7 +87,6 @@ function buildMasterIssnList(dbArray) {
   return Array.from(masterSet).filter(Boolean);
 }
 
-// Robust JavaScript date parser to compute days
 function calculateDaysRobust(dateStr1, dateStr2) {
   if (!dateStr1 || !dateStr2 || dateStr1.includes("Not reported") || dateStr2.includes("Not reported")) {
     return "Not reported";
@@ -98,32 +104,29 @@ function calculateDaysRobust(dateStr1, dateStr2) {
   return diffDays >= 0 ? diffDays : "Not reported"; 
 }
 
-// Theme Switcher
-themeToggle.addEventListener('click', () => {
+themeToggle?.addEventListener('click', () => {
   const currentTheme = document.documentElement.getAttribute('data-theme');
   const newTheme = currentTheme === 'light' ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', newTheme);
-  themeIcon.textContent = newTheme === 'light' ? '🌙' : '☀️';
-  themeLabel.textContent = newTheme === 'light' ? 'Dark Mode' : 'Light Mode';
+  if (themeIcon) themeIcon.textContent = newTheme === 'light' ? '🌙' : '☀️';
+  if (themeLabel) themeLabel.textContent = newTheme === 'light' ? 'Dark Mode' : 'Light Mode';
 });
 
-// Mode Toggle Listener
-modeSelect.addEventListener('change', (e) => {
+modeSelect?.addEventListener('change', (e) => {
   if (e.target.value === 'batch') {
-    doiGroup.classList.add('hidden');
-    batchInfo.classList.remove('hidden');
-    fileLabel.textContent = 'Upload CSV and/or PDF Files';
-    fileInput.multiple = true;
+    doiGroup?.classList.add('hidden');
+    batchInfo?.classList.remove('hidden');
+    if (fileLabel) fileLabel.textContent = 'Upload CSV and/or PDF Files';
+    if (fileInput) fileInput.multiple = true;
   } else {
-    doiGroup.classList.remove('hidden');
-    batchInfo.classList.add('hidden');
-    fileLabel.textContent = 'Upload Manuscript PDF';
-    fileInput.multiple = false;
+    doiGroup?.classList.remove('hidden');
+    batchInfo?.classList.add('hidden');
+    if (fileLabel) fileLabel.textContent = 'Upload Manuscript PDF';
+    if (fileInput) fileInput.multiple = false;
   }
 });
 
-// Main Execution
-runBtn.addEventListener('click', async () => {
+runBtn?.addEventListener('click', async () => {
   const apiKey = localStorage.getItem('pqrs_gemini_key');
   if (!apiKey) {
     alert('Please enter and save your Gemini API Key first.');
@@ -135,9 +138,9 @@ runBtn.addEventListener('click', async () => {
   
   try {
     if (mode === 'single') {
-      let rawDoi = doiInput.value;
+      let rawDoi = doiInput ? doiInput.value : "";
       let cleanDoi = rawDoi ? (rawDoi.match(/(10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+)/)?.[0].replace(/\/+$/, '') || "") : "";
-      const file = fileInput.files[0];
+      const file = fileInput?.files[0];
       
       if (!cleanDoi && !file) {
         alert('Please provide a valid DOI or a PDF file.');
@@ -145,12 +148,11 @@ runBtn.addEventListener('click', async () => {
         return;
       }
 
-      updateStatus('Processing manuscript...');
+      updateStatus('Processing manuscript using Gemini Flash...');
       const record = await processItem(cleanDoi, file, apiKey);
       addRecordToTable(record);
     } else {
-      // Batch Mode
-      const files = Array.from(fileInput.files);
+      const files = Array.from(fileInput?.files || []);
       let itemsToProcess = [];
       const csvFile = files.find(f => f.name.endsWith('.csv'));
       
@@ -196,7 +198,6 @@ runBtn.addEventListener('click', async () => {
 async function processItem(doi, file, apiKey) {
   let crossrefData = {};
   
-  // 1. Fetch CrossRef Metadata
   if (doi) {
     try {
       const crRes = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`);
@@ -207,7 +208,6 @@ async function processItem(doi, file, apiKey) {
   const issns = crossrefData.ISSN || [];
   const issnsFormatted = issns.join(' / ') || 'Not reported';
 
-  // 2. Query External APIs (MEDLINE, DOAJ, OpenAlex, Website Text)
   const [medlineStatus, doajStatus, openAlexData, websiteContext] = await Promise.all([
     checkStrictMedline(doi),
     checkDOAJIndexing(issns),
@@ -215,15 +215,13 @@ async function processItem(doi, file, apiKey) {
     fetchWebsiteText(doi)
   ]);
 
-  // 3. Convert PDF to Base64
   let pdfBase64 = null;
   if (file) {
     pdfBase64 = await fileToBase64(file);
   }
 
-  // 4. Construct AI Prompt Parameters
-  const isPubMed = (openAlexData && openAlexData.ids && openAlexData.ids.pmid) ? "Yes" : "No";
-  const isPmc = (openAlexData && openAlexData.ids && openAlexData.ids.pmcid) ? "Yes" : "No";
+  const openAlexPubMed = (openAlexData?.ids?.pmid) ? "Yes" : "No";
+  const openAlexPMC = (openAlexData?.ids?.pmcid) ? "Yes" : "No";
   const openAlexPubDate = openAlexData?.publication_date || "Not reported in OpenAlex";
 
   let crossrefPubDate = "Not reported in CrossRef";
@@ -238,63 +236,51 @@ async function processItem(doi, file, apiKey) {
 
   let isScopus = "No";
   let isEmbase = "No";
-  const cleanManuscriptIssns = issns.map(issn => issn.replace(/[^0-9X]/gi, '').toUpperCase());
+  const cleanManuscriptIssns = issns.map(i => i.replace(/[^0-9X]/gi, '').toUpperCase());
   if (cleanManuscriptIssns.length > 0) {
     if (cleanManuscriptIssns.some(i => scopusMasterList.includes(i))) isScopus = "Yes";
     if (cleanManuscriptIssns.some(i => embaseMasterList.includes(i))) isEmbase = "Yes";
   }
 
-  // 5. Call Gemini API Directly from Browser
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
+  // Upgrade to gemini-2.5-flash for high analytical capacity
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const promptText = `
-You are an expert research integrity auditor and bibliometrician.
-Analyze the attached manuscript PDF along with the CrossRef metadata, OpenAlex metadata, and scraped Website Context.
+You are an expert research integrity auditor and bibliometrician performing a rigorous peer-review extraction.
+Analyze the attached manuscript PDF, OpenAlex metadata, CrossRef metadata, and scraped web text.
 
-INSTRUCTION: Use OpenAlex metadata as your primary source of truth for identifiers/affiliations. If missing, default to the PDF.
+OpenAlex Metadata: ${JSON.stringify(openAlexData || {})} (Pub Date: ${openAlexPubDate})
+CrossRef Metadata: ${JSON.stringify(crossrefData || {})} (Pub Date: ${crossrefPubDate})
+Scraped Website Context: ${websiteContext}
 
-OpenAlex Metadata:
-${JSON.stringify(openAlexData || {})}
-Note: OpenAlex official database publication date is: ${openAlexPubDate}
-
-CrossRef Metadata:
-${JSON.stringify(crossrefData || {})}
-Note: CrossRef official database publication date is: ${crossrefPubDate}
-
-Publisher Website Scraped Text:
-${websiteContext}
-
-Extract and audit these exact keys strictly as JSON:
-
-1. "article_title": Full title of the article. Use OpenAlex primarily.
-2. "journal_name": Name of the publishing journal. Use OpenAlex primarily.
-3. "authors": Formatted as "1 - [Name] [Surname]; 2 - [Name] [Surname]". 
-4. "affiliation_department": Format as "1 - [Dept]; 2 - [Dept]". Deduplicate identical departments.
-5. "affiliation_college": Format as "1 - [College]; 2 - [College]".
-6. "affiliation_university": Format as "1 - [University]; 2 - [University]".
-7. "affiliation_city": Deduplicate the list so no city is repeated. Format as a semicolon-separated string.
-8. "affiliation_country": Deduplicate the list so no country is repeated. Format as a semicolon-separated string.
-9. "orcid_ids": ORCID numbers in order of authorship.
-10. "publisher": Name of publisher. Extract strictly from OpenAlex or CrossRef. Do NOT guess based on memory.
-11. "publisher_country": Country of publisher headquarters.
-12. "special_issue": "Yes" or "No".
-13. "study_design": Precise study design.
-14. "reporting_guidelines": Scan the manuscript for ANY mention of adherence to methodological frameworks, reporting standards, prior recommendations, or guidelines (e.g., PRISMA, CARE, STROBE, or "conducted in accordance with..."). If followed, output its name or description. If none, output "Not reported".
-15. "ethics_approval": If study DOES NOT involve human/animal participants, output "Not applicable". If it DOES, actively scan the text for Institutional Review Board (IRB), Institutional Ethics Committee (IEC), Ethical Clearance, or Animal Ethics approval statements. Extract the exact approval number or ID. If human/animal intervention is present but no approval is mentioned, state "Not reported".
-16. "trial_registration": Mandatory for clinical interventions. Mention registration number. If non-human, state "Not applicable". If clinical without ID, state "Not reported".
-17. "protocol_registration": Scan the text and reference list for protocol registrations (e.g., OSF, PROSPERO). Look explicitly for protocol DOIs (e.g., 10.17605/OSF.IO/...) or URLs. Extract the exact DOI/link. If not found, output "Not reported".
-18. "received_date": Aggressively scan the PDF's extreme margins, footnotes, copyright headers, and title-page for the exact "Received", "Submitted", or "Recibido" date. Extract raw date text. If missing, output "Not reported".
-19. "accepted_date": Aggressively scan the PDF margins/footnotes for the exact "Accepted", "Revised", or "Aceptado" date. Extract raw date text. If missing, output "Not reported".
-20. "published_date": Use OpenAlex/CrossRef date primarily. Also check the PDF and website text for "Published", "Available online", or "Publicado". Extract raw date text. If missing, output "Not reported".
-21. "scientific_syntax": Count spelling errors, subject-verb agreement failures, and verb-tense inconsistencies. Apply this grading: 0 to 5 errors = "[Acceptable]". 6 to 15 errors = "[Average]". More than 15 errors = "[Poor]".
-22. "funding": "Yes" or "No".
-23. "journal_self_citation_percentage": Estimated percentage of references citing the publishing journal itself.
-24. "tortured_phrases": List any tortured phrases identified. If none, state "None".
-25. "hallucinated_references": List suspicious references by number. If none found, state "None".
-26. "pubmed": "Output EXACTLY this string, do not alter it: ${isPubMed}"
-27. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
-28. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
-29. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
+Extract and audit the following parameters with absolute fidelity:
+1. article_title: Full title.
+2. journal_name: Official journal title.
+3. authors: Format "1 - Name Surname; 2 - Name Surname".
+4. affiliation_department: Format "1 - Dept; 2 - Dept". Deduplicate synonyms.
+5. affiliation_college: Format "1 - College; 2 - College".
+6. affiliation_university: Format "1 - Univ; 2 - Univ".
+7. affiliation_city: Unique semicolon-separated cities.
+8. affiliation_country: Unique semicolon-separated countries.
+9. orcid_ids: ORCID numbers or "Not reported".
+10. publisher: Exact publisher name from OpenAlex/CrossRef JSON (Do not use memory).
+11. publisher_country: Publisher location country.
+12. special_issue: "Yes" or "No".
+13. study_design: Exact design (e.g., Randomized Controlled Trial, Systematic Review, Case Report).
+14. reporting_guidelines: Check manuscript text for explicit adherence to reporting standards/guidelines (e.g., PRISMA, CARE, STROBE, CONSORT, ARRIVE, or text like "in accordance with guidelines"). State the guideline name or "Not reported".
+15. ethics_approval: If non-human/animal study (e.g., review, editorial, bibliometric), output "Not applicable". If human/animal study, search thoroughly for IRB, Institutional Ethics Committee (IEC), Ethical Clearance, or Approval number. Output the exact approval string. If intervention is present without approval statement, state "Not reported".
+16. trial_registration: Clinical trial registry ID or "Not applicable" / "Not reported".
+17. protocol_registration: Scan text, references, and footnotes for protocol registrations (e.g., OSF, PROSPERO, INPLASY, ClinicalTrials.gov). Extract exact registration DOI (e.g., 10.17605/OSF.IO/...) or URL. If not found, state "Not reported".
+18. received_date: Search extreme PDF margins, title page, headers, and footnotes for Received/Submitted/Recibido date. Extract verbatim text.
+19. accepted_date: Search PDF margins, headers, and footnotes for Accepted/Revised/Aceptado date. Extract verbatim text.
+20. published_date: Primary source OpenAlex/CrossRef or PDF/website text. Extract verbatim.
+21. scientific_syntax: Actively count spelling, subject-verb, and tense errors. 0-5 = "[Acceptable]", 6-15 = "[Average]", >15 = "[Poor]".
+22. funding: "Yes" or "No".
+23. journal_self_citation_percentage: Estimated percentage.
+24. tortured_phrases: List tortured phrases or "None".
+25. hallucinated_references: List non-existent references or "None".
+26. detected_pubmed: Check PDF text for PMID. If found or OpenAlex says Yes, output "Yes", else "${openAlexPubMed}".
+27. detected_pmc: Check PDF text for PMCID. If found or OpenAlex says Yes, output "Yes", else "${openAlexPMC}".
 `;
 
   const contents = [];
@@ -310,18 +296,70 @@ Extract and audit these exact keys strictly as JSON:
     contents.push({ role: "user", parts: [{ text: promptText }] });
   }
 
+  // Native Gemini Response Schema Enforcer
+  const payload = {
+    contents: contents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          article_title: { type: "STRING" },
+          journal_name: { type: "STRING" },
+          authors: { type: "STRING" },
+          affiliation_department: { type: "STRING" },
+          affiliation_college: { type: "STRING" },
+          affiliation_university: { type: "STRING" },
+          affiliation_city: { type: "STRING" },
+          affiliation_country: { type: "STRING" },
+          orcid_ids: { type: "STRING" },
+          publisher: { type: "STRING" },
+          publisher_country: { type: "STRING" },
+          special_issue: { type: "STRING" },
+          study_design: { type: "STRING" },
+          reporting_guidelines: { type: "STRING" },
+          ethics_approval: { type: "STRING" },
+          trial_registration: { type: "STRING" },
+          protocol_registration: { type: "STRING" },
+          received_date: { type: "STRING" },
+          accepted_date: { type: "STRING" },
+          published_date: { type: "STRING" },
+          scientific_syntax: { type: "STRING" },
+          funding: { type: "STRING" },
+          journal_self_citation_percentage: { type: "STRING" },
+          tortured_phrases: { type: "STRING" },
+          hallucinated_references: { type: "STRING" },
+          detected_pubmed: { type: "STRING" },
+          detected_pmc: { type: "STRING" }
+        },
+        required: [
+          "article_title", "journal_name", "authors", "affiliation_department",
+          "affiliation_college", "affiliation_university", "affiliation_city",
+          "affiliation_country", "orcid_ids", "publisher", "publisher_country",
+          "special_issue", "study_design", "reporting_guidelines", "ethics_approval",
+          "trial_registration", "protocol_registration", "received_date",
+          "accepted_date", "published_date", "scientific_syntax", "funding",
+          "journal_self_citation_percentage", "tortured_phrases", "hallucinated_references",
+          "detected_pubmed", "detected_pmc"
+        ]
+      }
+    }
+  };
+
   const aiRes = await fetch(geminiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: contents, generationConfig: { responseMimeType: "application/json" } })
+    body: JSON.stringify(payload)
   });
 
-  if (!aiRes.ok) throw new Error('Gemini API extraction failed. Check your API Key.');
+  if (!aiRes.ok) {
+    const errObj = await aiRes.json();
+    throw new Error(errObj.error?.message || 'Gemini API extraction failed.');
+  }
   
   const aiData = await aiRes.json();
   const aiResult = JSON.parse(aiData.candidates[0].content.parts[0].text);
 
-  // 6. Combine results and apply math
   aiResult.received_to_accepted_days = calculateDaysRobust(aiResult.received_date, aiResult.accepted_date);
   aiResult.accepted_to_published_days = calculateDaysRobust(aiResult.accepted_date, aiResult.published_date);
 
@@ -352,18 +390,17 @@ Extract and audit these exact keys strictly as JSON:
     journal_self_citation_percentage: aiResult.journal_self_citation_percentage || '0%',
     tortured_phrases: aiResult.tortured_phrases || 'None',
     hallucinated_references: aiResult.hallucinated_references || 'None',
-    pubmed: aiResult.pubmed || 'No', 
-    pmc: aiResult.pmc || 'No',       
+    pubmed: aiResult.detected_pubmed || 'No', 
+    pmc: aiResult.detected_pmc || 'No',       
     medline: medlineStatus ? 'Yes' : 'No', 
-    scopus: aiResult.scopus || 'No',
-    embase: aiResult.embase || 'No',
+    scopus: isScopus,
+    embase: isEmbase,
     doaj: doajStatus ? 'Yes' : 'No'
   };
 
   return finalRecord;
 }
 
-// Data Fetchers
 async function checkStrictMedline(doi) {
   if (!doi) return false;
   try {
@@ -392,7 +429,6 @@ async function fetchOpenAlexData(doi) {
   } catch { return null; }
 }
 
-// Utilizes AllOrigins CORS Proxy to scrape publisher websites client-side
 async function fetchWebsiteText(doi) {
   if (!doi) return "Not available";
   try {
@@ -425,15 +461,15 @@ function parseCsvDois(csvText) {
 
 function addRecordToTable(record) {
   extractedRecords.push(record);
-  if (extractedRecords.length === 1) resultsBody.innerHTML = '';
+  if (extractedRecords.length === 1 && resultsBody) resultsBody.innerHTML = '';
   
   const tr = document.createElement('tr');
   tr.innerHTML = Object.values(record).map(val => `<td>${val}</td>`).join('');
-  resultsBody.appendChild(tr);
-  exportCsvBtn.disabled = false;
+  resultsBody?.appendChild(tr);
+  if (exportCsvBtn) exportCsvBtn.disabled = false;
 }
 
-exportCsvBtn.addEventListener('click', () => {
+exportCsvBtn?.addEventListener('click', () => {
   if (extractedRecords.length === 0) return;
   const headers = Object.keys(extractedRecords[0]).join(',');
   const rows = extractedRecords.map(rec => Object.values(rec).map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
@@ -447,10 +483,10 @@ exportCsvBtn.addEventListener('click', () => {
 });
 
 function setLoading(isLoading) {
-  runBtn.disabled = isLoading;
-  btnText.textContent = isLoading ? 'Processing...' : 'Run Extraction';
-  btnSpinner.classList.toggle('hidden', !isLoading);
-  statusMessage.classList.toggle('hidden', !isLoading);
+  if (runBtn) runBtn.disabled = isLoading;
+  if (btnText) btnText.textContent = isLoading ? 'Processing...' : 'Run Extraction';
+  btnSpinner?.classList.toggle('hidden', !isLoading);
+  statusMessage?.classList.toggle('hidden', !isLoading);
 }
 
-function updateStatus(msg) { statusMessage.textContent = msg; }
+function updateStatus(msg) { if (statusMessage) statusMessage.textContent = msg; }
