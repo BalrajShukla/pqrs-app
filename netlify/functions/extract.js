@@ -39,14 +39,18 @@ function buildMasterIssnList(dbArray) {
 const embaseMasterList = buildMasterIssnList(embaseData);
 const scopusMasterList = buildMasterIssnList(scopusData);
 
-// Helper function to compute integer days using STRICT YYYY-MM-DD format
-function calculateDaysBetweenISO(dateStr1, dateStr2) {
-  if (!dateStr1 || !dateStr2 || dateStr1 === "Not reported" || dateStr2 === "Not reported") {
+// Robust JavaScript date parser to compute days even from messy raw text
+function calculateDaysRobust(dateStr1, dateStr2) {
+  if (!dateStr1 || !dateStr2 || dateStr1.includes("Not reported") || dateStr2.includes("Not reported")) {
     return "Not reported";
   }
   
-  const d1 = new Date(dateStr1);
-  const d2 = new Date(dateStr2);
+  // Strip out common text artifacts that publishers leave attached to dates
+  const clean1 = dateStr1.replace(/(received|accepted|published|available online|recibido|aceptado|publicado|:|;|,)/gi, '').trim();
+  const clean2 = dateStr2.replace(/(received|accepted|published|available online|recibido|aceptado|publicado|:|;|,)/gi, '').trim();
+
+  const d1 = new Date(clean1);
+  const d2 = new Date(clean2);
 
   if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
     return "Not reported";
@@ -57,7 +61,6 @@ function calculateDaysBetweenISO(dateStr1, dateStr2) {
   return diffDays >= 0 ? diffDays : "Not reported"; 
 }
 
-// Helper function to scrape the publisher's website text via the DOI
 async function fetchWebsiteText(doi) {
   if (!doi) return "No DOI provided for website scraping.";
   try {
@@ -74,11 +77,9 @@ async function fetchWebsiteText(doi) {
   }
 }
 
-// NEW: Helper function to fetch OpenAlex Data natively
 async function fetchOpenAlexData(doi) {
   if (!doi) return null;
   try {
-    // The polite pool simply adds a mailto header, preventing rate limits
     const res = await fetch(`https://api.openalex.org/works/https://doi.org/${doi}`, {
       headers: { 'User-Agent': 'mailto:pqrs.audit.tool@example.com' }
     });
@@ -112,11 +113,10 @@ exports.handler = async (event, context) => {
     const websiteContext = doi ? await fetchWebsiteText(doi) : "Not available";
     const openAlexData = doi ? await fetchOpenAlexData(doi) : null;
 
-    // Strict PubMed and PMC check via OpenAlex IDs
     const isPubMed = (openAlexData && openAlexData.ids && openAlexData.ids.pmid) ? "Yes" : "No";
     const isPmc = (openAlexData && openAlexData.ids && openAlexData.ids.pmcid) ? "Yes" : "No";
+    const openAlexPubDate = openAlexData?.publication_date || "Not reported in OpenAlex";
 
-    // --- EXTRACT CROSSREF DATES FOR BACKUP ---
     let crossrefPubDate = "Not reported in CrossRef";
     const crPub = crossrefData?.published || crossrefData?.['published-online'] || crossrefData?.['published-print'];
     if (crPub && crPub['date-parts'] && crPub['date-parts'][0]) {
@@ -127,7 +127,6 @@ exports.handler = async (event, context) => {
       crossrefPubDate = `${y}-${m}-${d}`;
     }
 
-    // --- DETERMINISTIC ISSN INDEXING CHECK ---
     let isScopus = "No";
     let isEmbase = "No";
     const manuscriptIssns = crossrefData?.ISSN || [];
@@ -142,17 +141,18 @@ exports.handler = async (event, context) => {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
 
     const promptText = `
-You are an expert research integrity auditor and bibliometrician specializing in dental/stomatology literature.
-Analyze the attached manuscript PDF along with the CrossRef metadata, the OpenAlex database metadata, and the scraped Website Context provided below.
+You are an expert research integrity auditor and bibliometrician.
+Analyze the attached manuscript PDF along with the CrossRef metadata, the OpenAlex database metadata, and the scraped Website Context.
 
-INSTRUCTION: Use the OpenAlex metadata as your primary source of truth for identifiers and affiliations. If OpenAlex is missing data, incomplete, or null, default to reading the PDF manuscript to extract the needed details.
+INSTRUCTION: Use the OpenAlex metadata as your primary source of truth for identifiers and affiliations. If OpenAlex is missing data, default to reading the PDF.
 
 OpenAlex Metadata:
 ${JSON.stringify(openAlexData || {})}
+Note: OpenAlex official database publication date is: ${openAlexPubDate}
 
 CrossRef Metadata:
 ${JSON.stringify(crossrefData || {})}
-Note: CrossRef official database publication date is strictly: ${crossrefPubDate}
+Note: CrossRef official database publication date is: ${crossrefPubDate}
 
 Publisher Website Scraped Text:
 ${websiteContext}
@@ -162,31 +162,32 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 1. "article_title": The full title of the article. Use OpenAlex primarily.
 2. "journal_name": The name of the publishing journal. Use OpenAlex primarily.
 3. "authors": Formatted as "1 - [Name] [Surname]; 2 - [Name] [Surname]". Clean abnormal spaces and superscripts.
-4. "affiliation_department": Departments. Format as "1 - [Dept]; 2 - [Dept]" matching the exact authorship order. Deduplicate identical or synonymous departments. If private clinic, state clinic name.
-5. "affiliation_college": Colleges. Format as "1 - [College]; 2 - [College]" matching the exact authorship order.
-6. "affiliation_university": Universities. Format as "1 - [University]; 2 - [University]" matching authorship order.
-7. "affiliation_city": Identify the cities for all authors. You MUST deduplicate the list so no city is repeated. Format as a semicolon-separated string (e.g., "Ahmedabad; New York").
-8. "affiliation_country": Identify the countries for all authors. You MUST deduplicate the list so no country is repeated. Format as a semicolon-separated string (e.g., "India; United States").
-9. "orcid_ids": ORCID numbers in order of authorship, or "Not reported". Use OpenAlex primarily.
-10. "publisher": Name of publisher. You MUST extract this strictly from the OpenAlex or CrossRef metadata provided above. Do not rely on your training memory to guess the publisher.
+4. "affiliation_department": Format as "1 - [Dept]; 2 - [Dept]" matching the authorship order. Deduplicate identical departments.
+5. "affiliation_college": Format as "1 - [College]; 2 - [College]" matching the authorship order.
+6. "affiliation_university": Format as "1 - [University]; 2 - [University]" matching authorship order.
+7. "affiliation_city": Deduplicate the list so no city is repeated. Format as a semicolon-separated string.
+8. "affiliation_country": Deduplicate the list so no country is repeated. Format as a semicolon-separated string.
+9. "orcid_ids": ORCID numbers in order of authorship.
+10. "publisher": Name of publisher. You MUST extract this strictly from the OpenAlex or CrossRef metadata provided above. Do NOT use your training memory to guess the publisher.
 11. "publisher_country": Country of publisher headquarters/issuance.
-12. "special_issue": "Yes" or "No" (Check for supplement, special issue, special section).
-13. "study_design": Precise study design (e.g., Randomized Controlled Trial, In Vitro, Systematic Review, Cross-sectional).
-14. "reporting_guidelines": Search the manuscript (especially Methods/Introduction) for specific guideline acronyms (e.g., PRISMA, PRISMA-ScR, STROBE, CONSORT, CARE, ARRIVE, MOOSE). Authors often state "conducted in accordance with [Guideline]". If a specific guideline is named, evaluate if they followed it. Output "Reported and Followed", "Reported but Not Followed", or "Not reported".
-15. "ethics_approval": Determine if the study involves an intervention on human/animal participants. If the article DOES NOT involve human/animal participants (e.g., a review article, bibliometric study, or editorial), you MUST output exactly "Not applicable". If it does involve interventions, state the ethics approval statement with reference number. If human/animal intervention is present but no approval is mentioned, state "Not reported".
+12. "special_issue": "Yes" or "No".
+13. "study_design": Precise study design.
+14. "reporting_guidelines": Scan the manuscript text for ANY mention of adherence to methodological frameworks, reporting standards, prior recommendations, or guidelines (e.g., PRISMA, CARE, STROBE, but also non-acronym statements like "conducted in accordance with the guidelines proposed by..."). If a guideline/standard is stated as followed, output its name or description. If none are mentioned, output "Not reported".
+15. "ethics_approval": Determine if the study involves human/animal participants. If NO (e.g., review, bibliometric, editorial), output exactly "Not applicable". If YES, actively scan the text for Institutional Review Board (IRB), Institutional Ethics Committee (IEC), Ethical Clearance, or Animal Ethics approval statements. Extract the exact approval number or ID. If human/animal intervention is present but no approval is mentioned, state "Not reported".
 16. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-17. "protocol_registration": Search the PDF thoroughly for any mention of a registered protocol (e.g., PROSPERO, OSF, ClinicalTrials.gov, INPLASY, Research Registry). If a link or registration number is provided, extract it. If not found, output "Not reported".
-18. "received_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Received" or "Submitted" date. Look carefully for foreign language equivalents (e.g., "Recibido", "Recebido"). Format strictly as YYYY-MM-DD (e.g., 2023-05-14). If the day is missing, use 01. If the date is completely missing, output "Not reported".
-19. "accepted_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Accepted", "Revised", or "Approved" date, including foreign equivalents (e.g., "Aceptado", "Aceito"). Format strictly as YYYY-MM-DD. If missing, output "Not reported".
-20. "published_date_iso": Search the PDF manuscript, the Publisher Website Scraped Text, AND the CrossRef publication date for the "Published" or "Available online" date, including foreign equivalents (e.g., "Publicado"). Format strictly as YYYY-MM-DD. If missing, output "Not reported".
-21. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
-22. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
-23. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number. If none found, state "None".
-24. "pubmed": "Output EXACTLY this string, do not alter it: ${isPubMed}"
-25. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
-26. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
-27. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
-28. "scientific_syntax": "First, actively count the instances of spelling errors (ignoring standard UK/US variations), subject-verb agreement failures, and verb-tense inconsistencies. Apply this exact quantitative grading system to generate your final output: If there are 0 to 5 total errors, output exactly '[Acceptable]'. If there are 6 to 15 total errors, output exactly '[Average]'. If there are more than 15 total errors, or if the syntax is broken enough to obscure scientific meaning, output exactly '[Poor]'."
+17. "protocol_registration": Scan the manuscript text and reference list for protocol registrations (e.g., OSF, PROSPERO, ClinicalTrials.gov, INPLASY). Look explicitly for protocol DOIs (e.g., 10.17605/OSF.IO/...) or registry URLs. Extract the exact DOI, link, or registration number. If not found, output "Not reported".
+18. "received_date": Aggressively scan the PDF's extreme vertical margins, footnotes, copyright headers, and title-page text for the exact "Received", "Submitted", or "Recibido" date. Extract the raw date text verbatim. If missing, output "Not reported".
+19. "accepted_date": Aggressively scan the PDF's margins, footnotes, and headers for the exact "Accepted", "Revised", or "Aceptado" date. Extract the raw date text verbatim. If missing, output "Not reported".
+20. "published_date": Use the OpenAlex or CrossRef publication date as your primary source. Also check the PDF and scraped website text for "Published", "Available online", or "Publicado". Extract the raw date text verbatim. If missing, output "Not reported".
+21. "scientific_syntax": Actively count instances of spelling errors (ignoring standard UK/US variations), subject-verb agreement failures, and verb-tense inconsistencies. Apply this exact quantitative grading system: 0 to 5 total errors = "[Acceptable]". 6 to 15 total errors = "[Average]". More than 15 total errors = "[Poor]".
+22. "funding": "Yes" or "No".
+23. "journal_self_citation_percentage": Estimated percentage of references citing the publishing journal itself.
+24. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified. If none, state "None".
+25. "hallucinated_references": List suspicious or non-existent references by number. If none found, state "None".
+26. "pubmed": "Output EXACTLY this string, do not alter it: ${isPubMed}"
+27. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
+28. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
+29. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
 `;
 
     const contents = [];
@@ -233,9 +234,9 @@ Extract and audit the following fields. Provide response strictly as JSON with k
     const jsonText = data.candidates[0].content.parts[0].text;
     const result = JSON.parse(jsonText);
 
-    // Compute integer day gaps flawlessly
-    result.received_to_accepted_days = calculateDaysBetweenISO(result.received_date_iso, result.accepted_date_iso);
-    result.accepted_to_published_days = calculateDaysBetweenISO(result.accepted_date_iso, result.published_date_iso);
+    // Compute integer day gaps using the new, highly robust JavaScript cleaning function
+    result.received_to_accepted_days = calculateDaysRobust(result.received_date, result.accepted_date);
+    result.accepted_to_published_days = calculateDaysRobust(result.accepted_date, result.published_date);
 
     return {
       statusCode: 200,
