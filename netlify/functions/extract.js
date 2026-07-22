@@ -168,24 +168,24 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 7. "affiliation_city": Identify the cities for all authors. You MUST deduplicate the list so no city is repeated. Format as a semicolon-separated string (e.g., "Ahmedabad; New York").
 8. "affiliation_country": Identify the countries for all authors. You MUST deduplicate the list so no country is repeated. Format as a semicolon-separated string (e.g., "India; United States").
 9. "orcid_ids": ORCID numbers in order of authorship, or "Not reported". Use OpenAlex primarily.
-10. "publisher": Name of publisher.
+10. "publisher": Name of publisher. You MUST extract this strictly from the OpenAlex or CrossRef metadata provided above. Do not rely on your training memory to guess the publisher.
 11. "publisher_country": Country of publisher headquarters/issuance.
 12. "special_issue": "Yes" or "No" (Check for supplement, special issue, special section).
 13. "study_design": Precise study design (e.g., Randomized Controlled Trial, In Vitro, Systematic Review, Cross-sectional).
-14. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
+14. "reporting_guidelines": Search the manuscript (especially Methods/Introduction) for specific guideline acronyms (e.g., PRISMA, PRISMA-ScR, STROBE, CONSORT, CARE, ARRIVE, MOOSE). Authors often state "conducted in accordance with [Guideline]". If a specific guideline is named, evaluate if they followed it. Output "Reported and Followed", "Reported but Not Followed", or "Not reported".
 15. "ethics_approval": Determine if the study involves an intervention on human/animal participants. If the article DOES NOT involve human/animal participants (e.g., a review article, bibliometric study, or editorial), you MUST output exactly "Not applicable". If it does involve interventions, state the ethics approval statement with reference number. If human/animal intervention is present but no approval is mentioned, state "Not reported".
 16. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-17. "received_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Received" or "Submitted" date. Format strictly as YYYY-MM-DD. If missing, output "Not reported".
-18. "accepted_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Accepted" or "Revised" date. Format strictly as YYYY-MM-DD. If missing, output "Not reported".
-19. "published_date_iso": Search the PDF manuscript, the Publisher Website Scraped Text, AND the CrossRef publication date for the "Published" or "Available online" date. Format strictly as YYYY-MM-DD. If missing, output "Not reported".
-20. "scientific_syntax": "First, actively count the instances of spelling errors (ignoring standard UK/US variations), subject-verb agreement failures, and verb-tense inconsistencies. Apply this exact quantitative grading system to generate your final output: If there are 0 to 5 total errors, output exactly '[Acceptable]'. If there are 6 to 15 total errors, output exactly '[Average]'. If there are more than 15 total errors, or if the syntax is broken enough to obscure scientific meaning, output exactly '[Poor]'."21. "funding": "Yes" or "No".
-22. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
-23. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
-24. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number. If none found, state "None".
-25. "pubmed": "Output EXACTLY this string, do not alter it: ${isPubMed}"
-26. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
-27. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
-28. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
+17. "protocol_registration": Search the PDF thoroughly for any mention of a registered protocol (e.g., PROSPERO, OSF, ClinicalTrials.gov, INPLASY, Research Registry). If a link or registration number is provided, extract it. If not found, output "Not reported".
+18. "received_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Received" or "Submitted" date. Look carefully for foreign language equivalents (e.g., "Recibido", "Recebido"). Format strictly as YYYY-MM-DD (e.g., 2023-05-14). If the day is missing, use 01. If the date is completely missing, output "Not reported".
+19. "accepted_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Accepted", "Revised", or "Approved" date, including foreign equivalents (e.g., "Aceptado", "Aceito"). Format strictly as YYYY-MM-DD. If missing, output "Not reported".
+20. "published_date_iso": Search the PDF manuscript, the Publisher Website Scraped Text, AND the CrossRef publication date for the "Published" or "Available online" date, including foreign equivalents (e.g., "Publicado"). Format strictly as YYYY-MM-DD. If missing, output "Not reported".
+21. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
+22. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
+23. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number. If none found, state "None".
+24. "pubmed": "Output EXACTLY this string, do not alter it: ${isPubMed}"
+25. "pmc": "Output EXACTLY this string, do not alter it: ${isPmc}"
+26. "scopus": "Output EXACTLY this string, do not alter it: ${isScopus}"
+27. "embase": "Output EXACTLY this string, do not alter it: ${isEmbase}"
 `;
 
     const contents = [];
