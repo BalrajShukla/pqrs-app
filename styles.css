@@ -215,7 +215,7 @@ table {
   border-collapse: collapse;
   font-size: 0.825rem;
   text-align: left;
-  white-space: nowrap;
+  /* Removed white-space: nowrap to allow cell wrapping */
 }
 
 th {
@@ -226,14 +226,15 @@ th {
   position: sticky;
   top: 0;
   z-index: 10;
+  white-space: nowrap; /* Keeps headers on one line */
 }
 
 td {
   padding: 0.65rem 1rem;
   border-bottom: 1px solid var(--border-color);
-  max-width: 250px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 160px; /* Prevents columns from shrinking too much */
+  vertical-align: top;
+  word-wrap: break-word; /* Forces long text like DOIs or Departments to wrap */
 }
 
 tr:nth-child(even) {
