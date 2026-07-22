@@ -27,7 +27,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   const savedKey = localStorage.getItem('pqrs_gemini_key');
   if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  // Determine base path for GitHub Pages subfolder compatibility
   const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
   try {
@@ -35,9 +34,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (scopusRes.ok) {
       const scopusData = await scopusRes.json();
       scopusMasterList = buildMasterIssnList(scopusData);
-      console.log(`Successfully loaded ${scopusMasterList.length} Scopus ISSNs.`);
+      console.log(`Loaded ${scopusMasterList.length} Scopus ISSNs.`);
     } else {
-      console.error("Failed to load Scopus database. HTTP Status:", scopusRes.status);
+      console.error("Failed to load Scopus database.");
     }
   } catch (e) {
     console.error("Error fetching Scopus ISSNs:", e);
@@ -48,9 +47,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (embaseRes.ok) {
       const embaseData = await embaseRes.json();
       embaseMasterList = buildMasterIssnList(embaseData);
-      console.log(`Successfully loaded ${embaseMasterList.length} Embase ISSNs.`);
+      console.log(`Loaded ${embaseMasterList.length} Embase ISSNs.`);
     } else {
-      console.error("Failed to load Embase database. HTTP Status:", embaseRes.status);
+      console.error("Failed to load Embase database.");
     }
   } catch (e) {
     console.error("Error fetching Embase ISSNs:", e);
@@ -74,7 +73,8 @@ function buildMasterIssnList(dbArray) {
   if (!Array.isArray(dbArray)) return [];
   dbArray.forEach(row => {
     if (typeof row === 'string') {
-      masterSet.add(row.replace(/[^0-9X]/gi, '').toUpperCase());
+      const clean = row.replace(/[^0-9X]/gi, '').toUpperCase();
+      if (clean.length === 8) masterSet.add(clean);
     } else if (typeof row === 'object' && row !== null) {
       Object.values(row).forEach(val => {
         if (typeof val === 'string') {
@@ -148,7 +148,7 @@ runBtn?.addEventListener('click', async () => {
         return;
       }
 
-      updateStatus('Processing manuscript using Gemini Flash...');
+      updateStatus('Auditing manuscript with Gemini 2.5 Flash...');
       const record = await processItem(cleanDoi, file, apiKey);
       addRecordToTable(record);
     } else {
@@ -175,7 +175,7 @@ runBtn?.addEventListener('click', async () => {
 
       for (let i = 0; i < itemsToProcess.length; i++) {
         const item = itemsToProcess[i];
-        updateStatus(`Processing ${i + 1} of ${itemsToProcess.length}: ${item.doi || item.file?.name}`);
+        updateStatus(`Auditing ${i + 1} of ${itemsToProcess.length}: ${item.doi || item.file?.name}`);
         try {
           const record = await processItem(item.doi, item.file, apiKey);
           addRecordToTable(record);
@@ -186,7 +186,7 @@ runBtn?.addEventListener('click', async () => {
       }
     }
     
-    updateStatus('Extraction completed successfully!');
+    updateStatus('Audit completed successfully!');
   } catch (err) {
     alert('Execution error: ' + err.message);
     updateStatus('Error occurred during execution.');
@@ -205,12 +205,9 @@ async function processItem(doi, file, apiKey) {
     } catch (e) { console.warn('CrossRef lookup failed.', e); }
   }
 
-  const issns = crossrefData.ISSN || [];
-  const issnsFormatted = issns.join(' / ') || 'Not reported';
-
   const [medlineStatus, doajStatus, openAlexData, websiteContext] = await Promise.all([
     checkStrictMedline(doi),
-    checkDOAJIndexing(issns),
+    checkDOAJIndexing(crossrefData.ISSN || []),
     fetchOpenAlexData(doi),
     fetchWebsiteText(doi)
   ]);
@@ -234,26 +231,17 @@ async function processItem(doi, file, apiKey) {
     crossrefPubDate = `${y}-${m}-${d}`;
   }
 
-  let isScopus = "No";
-  let isEmbase = "No";
-  const cleanManuscriptIssns = issns.map(i => i.replace(/[^0-9X]/gi, '').toUpperCase());
-  if (cleanManuscriptIssns.length > 0) {
-    if (cleanManuscriptIssns.some(i => scopusMasterList.includes(i))) isScopus = "Yes";
-    if (cleanManuscriptIssns.some(i => embaseMasterList.includes(i))) isEmbase = "Yes";
-  }
-
-  // Upgrade to gemini-2.5-flash for high analytical capacity
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const promptText = `
-You are an expert research integrity auditor and bibliometrician performing a rigorous peer-review extraction.
+You are an expert research integrity auditor performing a forensic manuscript extraction.
 Analyze the attached manuscript PDF, OpenAlex metadata, CrossRef metadata, and scraped web text.
 
 OpenAlex Metadata: ${JSON.stringify(openAlexData || {})} (Pub Date: ${openAlexPubDate})
 CrossRef Metadata: ${JSON.stringify(crossrefData || {})} (Pub Date: ${crossrefPubDate})
 Scraped Website Context: ${websiteContext}
 
-Extract and audit the following parameters with absolute fidelity:
+Extract and audit these parameters with strict fidelity:
 1. article_title: Full title.
 2. journal_name: Official journal title.
 3. authors: Format "1 - Name Surname; 2 - Name Surname".
@@ -263,24 +251,25 @@ Extract and audit the following parameters with absolute fidelity:
 7. affiliation_city: Unique semicolon-separated cities.
 8. affiliation_country: Unique semicolon-separated countries.
 9. orcid_ids: ORCID numbers or "Not reported".
-10. publisher: Exact publisher name from OpenAlex/CrossRef JSON (Do not use memory).
+10. publisher: Exact publisher name from OpenAlex/CrossRef JSON (Do not guess from memory).
 11. publisher_country: Publisher location country.
 12. special_issue: "Yes" or "No".
-13. study_design: Exact design (e.g., Randomized Controlled Trial, Systematic Review, Case Report).
-14. reporting_guidelines: Check manuscript text for explicit adherence to reporting standards/guidelines (e.g., PRISMA, CARE, STROBE, CONSORT, ARRIVE, or text like "in accordance with guidelines"). State the guideline name or "Not reported".
-15. ethics_approval: If non-human/animal study (e.g., review, editorial, bibliometric), output "Not applicable". If human/animal study, search thoroughly for IRB, Institutional Ethics Committee (IEC), Ethical Clearance, or Approval number. Output the exact approval string. If intervention is present without approval statement, state "Not reported".
+13. study_design: Exact design (e.g., Cross-sectional, Psychometric Validation, Case Report, Systematic Review).
+14. reporting_guidelines: Scan Methodology/Text for ANY statement of adherence to reporting standards or frameworks (e.g., PRISMA, CARE, STROBE, or author-developed frameworks like "guidelines developed by Boateng et al."). Output the exact framework name or citation. If none, state "Not reported".
+15. ethics_approval: Scan for Ethics Committee, IEC, IRB, or Ethical Clearance mentions. ACTIVELY extract parenthetical IDs (e.g., "IEC/CDSRC/2026/24"). Do not ignore codes inside parentheses. If non-human/animal study, output "Not applicable".
 16. trial_registration: Clinical trial registry ID or "Not applicable" / "Not reported".
-17. protocol_registration: Scan text, references, and footnotes for protocol registrations (e.g., OSF, PROSPERO, INPLASY, ClinicalTrials.gov). Extract exact registration DOI (e.g., 10.17605/OSF.IO/...) or URL. If not found, state "Not reported".
-18. received_date: Search extreme PDF margins, title page, headers, and footnotes for Received/Submitted/Recibido date. Extract verbatim text.
-19. accepted_date: Search PDF margins, headers, and footnotes for Accepted/Revised/Aceptado date. Extract verbatim text.
-20. published_date: Primary source OpenAlex/CrossRef or PDF/website text. Extract verbatim.
+17. protocol_registration: Scan text and references for protocol registrations (e.g., OSF, PROSPERO). Reconstruct split DOIs caused by line breaks (e.g., "10.17605/OSF.IO/TVUKC"). Extract full DOI or URL.
+18. received_date: Search extreme PDF margins, headers, title page, and footnotes for Received/Submitted/Recibido date. Extract verbatim.
+19. accepted_date: Search PDF margins, headers, and footnotes for Accepted/Revised/Aceptado date. Extract verbatim.
+20. published_date: Primary source OpenAlex/CrossRef or PDF text. Extract verbatim.
 21. scientific_syntax: Actively count spelling, subject-verb, and tense errors. 0-5 = "[Acceptable]", 6-15 = "[Average]", >15 = "[Poor]".
 22. funding: "Yes" or "No".
 23. journal_self_citation_percentage: Estimated percentage.
 24. tortured_phrases: List tortured phrases or "None".
 25. hallucinated_references: List non-existent references or "None".
-26. detected_pubmed: Check PDF text for PMID. If found or OpenAlex says Yes, output "Yes", else "${openAlexPubMed}".
-27. detected_pmc: Check PDF text for PMCID. If found or OpenAlex says Yes, output "Yes", else "${openAlexPMC}".
+26. pdf_extracted_issns: Extract ALL p-ISSN and e-ISSN numbers printed on the PDF pages (e.g., "0898-9621; 1545-5815").
+27. detected_pubmed: Output "Yes" if PMID is found in PDF/OpenAlex, else "${openAlexPubMed}".
+28. detected_pmc: Output "Yes" if PMCID is found in PDF/OpenAlex, else "${openAlexPMC}".
 `;
 
   const contents = [];
@@ -296,7 +285,6 @@ Extract and audit the following parameters with absolute fidelity:
     contents.push({ role: "user", parts: [{ text: promptText }] });
   }
 
-  // Native Gemini Response Schema Enforcer
   const payload = {
     contents: contents,
     generationConfig: {
@@ -329,6 +317,7 @@ Extract and audit the following parameters with absolute fidelity:
           journal_self_citation_percentage: { type: "STRING" },
           tortured_phrases: { type: "STRING" },
           hallucinated_references: { type: "STRING" },
+          pdf_extracted_issns: { type: "STRING" },
           detected_pubmed: { type: "STRING" },
           detected_pmc: { type: "STRING" }
         },
@@ -340,7 +329,7 @@ Extract and audit the following parameters with absolute fidelity:
           "trial_registration", "protocol_registration", "received_date",
           "accepted_date", "published_date", "scientific_syntax", "funding",
           "journal_self_citation_percentage", "tortured_phrases", "hallucinated_references",
-          "detected_pubmed", "detected_pmc"
+          "pdf_extracted_issns", "detected_pubmed", "detected_pmc"
         ]
       }
     }
@@ -360,6 +349,37 @@ Extract and audit the following parameters with absolute fidelity:
   const aiData = await aiRes.json();
   const aiResult = JSON.parse(aiData.candidates[0].content.parts[0].text);
 
+  // --- MULTI-SOURCE ISSN MERGING (CRITICAL SCOPUS/EMBASE FIX) ---
+  let masterIssnPool = new Set();
+
+  // 1. Add CrossRef ISSNs
+  (crossrefData.ISSN || []).forEach(i => masterIssnPool.add(i));
+
+  // 2. Add OpenAlex ISSNs
+  if (openAlexData?.issn) {
+    (Array.isArray(openAlexData.issn) ? openAlexData.issn : [openAlexData.issn]).forEach(i => masterIssnPool.add(i));
+  }
+  if (openAlexData?.primary_location?.source?.issn) {
+    (Array.isArray(openAlexData.primary_location.source.issn) ? openAlexData.primary_location.source.issn : [openAlexData.primary_location.source.issn]).forEach(i => masterIssnPool.add(i));
+  }
+
+  // 3. Add AI-Extracted ISSNs from PDF
+  if (aiResult.pdf_extracted_issns) {
+    aiResult.pdf_extracted_issns.split(/;|,|\//).forEach(i => masterIssnPool.add(i.trim()));
+  }
+
+  // Clean and check against local master lists
+  const cleanedIssnArray = Array.from(masterIssnPool).map(i => i.replace(/[^0-9X]/gi, '').toUpperCase()).filter(i => i.length === 8);
+  
+  let isScopus = "No";
+  let isEmbase = "No";
+  if (cleanedIssnArray.length > 0) {
+    if (cleanedIssnArray.some(i => scopusMasterList.includes(i))) isScopus = "Yes";
+    if (cleanedIssnArray.some(i => embaseMasterList.includes(i))) isEmbase = "Yes";
+  }
+
+  const formattedIssnDisplay = Array.from(masterIssnPool).filter(Boolean).join(' / ') || 'Not reported';
+
   aiResult.received_to_accepted_days = calculateDaysRobust(aiResult.received_date, aiResult.accepted_date);
   aiResult.accepted_to_published_days = calculateDaysRobust(aiResult.accepted_date, aiResult.published_date);
 
@@ -367,7 +387,7 @@ Extract and audit the following parameters with absolute fidelity:
     doi: doi || crossrefData.DOI || 'Extracted from PDF',
     article_title: aiResult.article_title || 'Not reported',
     journal_name: aiResult.journal_name || 'Not reported',
-    issn: issnsFormatted,
+    issn: formattedIssnDisplay,
     authors: aiResult.authors || 'Not reported',
     affiliation_department: aiResult.affiliation_department || 'Not reported',
     affiliation_college: aiResult.affiliation_college || 'Not reported',
