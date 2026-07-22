@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -16,8 +14,8 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Direct Gemini API Endpoint (using gemini-1.5-flash-lite / flash-lite)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-lite:generateContent?key=${apiKey}`;
+    // Using the exact model you requested natively. No external fetch modules required.
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
 
     const promptText = `
 You are an expert research integrity auditor and bibliometrician specializing in dental/stomatology literature.
@@ -53,7 +51,6 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 
     const contents = [];
 
-    // Add PDF inline data if supplied
     if (pdfBase64) {
       contents.push({
         role: "user",
