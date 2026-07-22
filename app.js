@@ -53,7 +53,6 @@ runBtn.addEventListener('click', async () => {
       let rawDoi = doiInput.value;
       let cleanDoi = "";
       
-      // Strict Regular Expression to extract only the 10.xxxx/... portion
       if (rawDoi) {
         const doiMatch = rawDoi.match(/(10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+)/);
         cleanDoi = doiMatch ? doiMatch[0].replace(/\/+$/, '') : "";
@@ -140,9 +139,9 @@ async function processItem(doi, file) {
   const issns = crossrefData.ISSN || [];
   const issnsFormatted = issns.join(' / ') || 'Not reported';
 
-  // 2. Query Indexing APIs concurrently (PubMed/DOAJ)
-  const [pubMedStatus, doajStatus] = await Promise.all([
-    checkPubMedIndexing(cleanDoi || crossrefData.title?.[0]),
+  // 2. Query strict Indexing APIs concurrently (MEDLINE article-level / DOAJ)
+  const [medlineStatus, doajStatus] = await Promise.all([
+    checkStrictMedline(cleanDoi),
     checkDOAJIndexing(issns)
   ]);
 
@@ -152,7 +151,7 @@ async function processItem(doi, file) {
     pdfBase64 = await fileToBase64(file);
   }
 
-  // 4. Call Backend Gemini Serverless Function
+  // 4. Call Backend Gemini Serverless Function (Handles OpenAlex natively)
   const apiRes = await fetch('/api/extract', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -172,6 +171,8 @@ async function processItem(doi, file) {
   // Combine results
   const finalRecord = {
     doi: cleanDoi || crossrefData.DOI || 'Extracted from PDF',
+    article_title: aiResult.article_title || 'Not reported',
+    journal_name: aiResult.journal_name || 'Not reported',
     issn: issnsFormatted,
     authors: aiResult.authors || 'Not reported',
     affiliation_department: aiResult.affiliation_department || 'Not reported',
@@ -189,14 +190,14 @@ async function processItem(doi, file) {
     trial_registration: aiResult.trial_registration || 'Not applicable',
     received_to_accepted_days: (aiResult.received_to_accepted_days !== undefined && aiResult.received_to_accepted_days !== null) ? aiResult.received_to_accepted_days : 'Not reported',
     accepted_to_published_days: (aiResult.accepted_to_published_days !== undefined && aiResult.accepted_to_published_days !== null) ? aiResult.accepted_to_published_days : 'Not reported',
-    credit_taxonomy: aiResult.credit_taxonomy || 'Not reported',
+    scientific_syntax: aiResult.scientific_syntax || 'Not evaluated',
     funding: aiResult.funding || 'No',
     journal_self_citation_percentage: aiResult.journal_self_citation_percentage || '0%',
     tortured_phrases: aiResult.tortured_phrases || 'None',
     hallucinated_references: aiResult.hallucinated_references || 'None',
-    pubmed: pubMedStatus.pubmed ? 'Yes' : 'No',
-    pmc: pubMedStatus.pmc ? 'Yes' : 'No',
-    medline: pubMedStatus.medline ? 'Yes' : 'No',
+    pubmed: aiResult.pubmed || 'No', // Pulled strictly from OpenAlex PMID in backend
+    pmc: aiResult.pmc || 'No',       // Pulled strictly from OpenAlex PMCID in backend
+    medline: medlineStatus ? 'Yes' : 'No', // Strict DOI search
     scopus: aiResult.scopus || 'No',
     embase: aiResult.embase || 'No',
     doaj: doajStatus ? 'Yes' : 'No'
@@ -206,25 +207,16 @@ async function processItem(doi, file) {
 }
 
 // Helpers & External APIs
-async function checkPubMedIndexing(query) {
-  if (!query) return { pubmed: false, pmc: false, medline: false };
+async function checkStrictMedline(doi) {
+  if (!doi) return false;
   try {
-    // Explicitly dropping json format to parse the native XML <Count> tag
-    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}`;
+    // Uses [doi] and medline[sb] to strictly check if the article itself is in the MEDLINE subset
+    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(doi)}[doi]+AND+medline[sb]&retmode=json`;
     const res = await fetch(url);
-    const xmlText = await res.text();
-    
-    // Strict Regex for PubMed XML Count tag
-    const countMatch = xmlText.match(/<Count>(\d+)<\/Count>/);
-    const count = countMatch ? parseInt(countMatch[1], 10) : 0;
-    
-    return {
-      pubmed: count > 0,
-      pmc: count > 0,
-      medline: count > 0
-    };
+    const data = await res.json();
+    return parseInt(data.esearchresult?.count || '0') > 0;
   } catch {
-    return { pubmed: false, pmc: false, medline: false };
+    return false;
   }
 }
 
@@ -269,6 +261,8 @@ function addRecordToTable(record) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>${record.doi}</td>
+    <td>${record.article_title}</td>
+    <td>${record.journal_name}</td>
     <td>${record.issn}</td>
     <td>${record.authors}</td>
     <td>${record.affiliation_department}</td>
@@ -286,7 +280,7 @@ function addRecordToTable(record) {
     <td>${record.trial_registration}</td>
     <td>${record.received_to_accepted_days}</td>
     <td>${record.accepted_to_published_days}</td>
-    <td>${record.credit_taxonomy}</td>
+    <td>${record.scientific_syntax}</td>
     <td>${record.funding}</td>
     <td>${record.journal_self_citation_percentage}</td>
     <td>${record.tortured_phrases}</td>
