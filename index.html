@@ -12,6 +12,20 @@
 
   <header class="app-header">
     <div class="header-container">
+      <!-- API Key Configuration Panel -->
+<div class="api-key-panel" style="background: var(--bg-secondary); padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border-color);">
+  <h3 style="margin-top: 0;">⚙️ Setup PQRS</h3>
+  <p style="font-size: 0.9em; color: var(--text-muted);">
+    PQRS operates entirely in your browser to ensure strict data privacy. To run an extraction, please enter a free Google Gemini API key. Your key is stored securely in your browser's local memory and is never uploaded to any server.
+  </p>
+  <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <input type="password" id="apiKeyInput" placeholder="Enter Gemini API Key (AIzaSy...)" style="flex: 1; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); min-width: 250px;">
+    <button id="saveKeyBtn" style="padding: 10px 20px; cursor: pointer; background: var(--primary-color); color: white; border: none; border-radius: 4px;">Save Key</button>
+  </div>
+  <p style="font-size: 0.85em; margin-bottom: 0; margin-top: 10px;">
+    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--primary-color); text-decoration: none;">👉 Don't have a key? Click here to generate one for free in 60 seconds.</a>
+  </p>
+</div>
       <div class="logo-area">
         <h1>PQRS</h1>
         <p class="subtitle">Probing the Quality of Research in Stomatology</p>
