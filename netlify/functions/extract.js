@@ -39,18 +39,14 @@ function buildMasterIssnList(dbArray) {
 const embaseMasterList = buildMasterIssnList(embaseData);
 const scopusMasterList = buildMasterIssnList(scopusData);
 
-// Helper function to compute integer days between two date strings deterministically
-function calculateDaysBetween(dateStr1, dateStr2) {
+// Helper function to compute integer days using STRICT YYYY-MM-DD format
+function calculateDaysBetweenISO(dateStr1, dateStr2) {
   if (!dateStr1 || !dateStr2 || dateStr1 === "Not reported" || dateStr2 === "Not reported") {
     return "Not reported";
   }
   
-  // Clean ordinal suffixes (e.g., '12th May' -> '12 May')
-  const cleanStr1 = String(dateStr1).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim();
-  const cleanStr2 = String(dateStr2).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim();
-
-  const d1 = new Date(cleanStr1);
-  const d2 = new Date(cleanStr2);
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
 
   if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
     return "Not reported";
@@ -58,7 +54,7 @@ function calculateDaysBetween(dateStr1, dateStr2) {
 
   const diffTime = d2.getTime() - d1.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 ? diffDays : "Not reported";
+  return diffDays >= 0 ? diffDays : "Not reported"; // Prevents negative days if dates are mixed up
 }
 
 exports.handler = async (event, context) => {
@@ -75,6 +71,17 @@ exports.handler = async (event, context) => {
         statusCode: 500,
         body: JSON.stringify({ error: 'Server missing GEMINI_API_KEY configuration.' })
       };
+    }
+
+    // --- EXTRACT CROSSREF DATES FOR BACKUP ---
+    let crossrefPubDate = "Not reported in CrossRef";
+    const crPub = crossrefData?.published || crossrefData?.['published-online'] || crossrefData?.['published-print'];
+    if (crPub && crPub['date-parts'] && crPub['date-parts'][0]) {
+      const parts = crPub['date-parts'][0];
+      const y = parts[0];
+      const m = parts[1] ? String(parts[1]).padStart(2, '0') : '01';
+      const d = parts[2] ? String(parts[2]).padStart(2, '0') : '01';
+      crossrefPubDate = `${y}-${m}-${d}`;
     }
 
     // --- DETERMINISTIC ISSN INDEXING CHECK ---
@@ -102,6 +109,7 @@ Analyze the attached manuscript PDF along with the CrossRef metadata provided be
 
 CrossRef Metadata:
 ${JSON.stringify(crossrefData || {})}
+Note: CrossRef official database publication date is strictly: ${crossrefPubDate}
 
 Extract and audit the following fields. Provide response strictly as JSON with key-value pairs matching these exact keys:
 
@@ -119,9 +127,9 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 12. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
 13. "ethics_approval": State ethics approval statement with reference number. If mentioned without number state "Mentioned without approval number". If absent, state "Not reported".
 14. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-15. "received_date": Exact string of the "Received" or "Submitted" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
-16. "accepted_date": Exact string of the "Accepted" or "Revised" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
-17. "published_date": Exact string of the "Published" or "Available online" date as printed in the PDF or CrossRef metadata. If missing, output "Not reported".
+15. "received_date_iso": Search the manuscript for the exact "Received" or "Submitted" date. You MUST format this date strictly as YYYY-MM-DD (e.g., 2023-05-14). If the day is missing, use 01. If the date is completely missing, output "Not reported".
+16. "accepted_date_iso": Search the manuscript for the exact "Accepted", "Revised", or "Approved" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
+17. "published_date_iso": Search the manuscript AND the CrossRef official database publication date for the "Published" or "Available online" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
 18. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
 19. "funding": "Yes" or "No".
 20. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
@@ -175,9 +183,9 @@ Extract and audit the following fields. Provide response strictly as JSON with k
     const jsonText = data.candidates[0].content.parts[0].text;
     const result = JSON.parse(jsonText);
 
-    // Compute integer day gaps in JavaScript
-    result.received_to_accepted_days = calculateDaysBetween(result.received_date, result.accepted_date);
-    result.accepted_to_published_days = calculateDaysBetween(result.accepted_date, result.published_date);
+    // Compute integer day gaps flawlessly using the strict YYYY-MM-DD outputs
+    result.received_to_accepted_days = calculateDaysBetweenISO(result.received_date_iso, result.accepted_date_iso);
+    result.accepted_to_published_days = calculateDaysBetweenISO(result.accepted_date_iso, result.published_date_iso);
 
     return {
       statusCode: 200,
