@@ -14,7 +14,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Using the exact model you requested natively. No external fetch modules required.
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
 
     const promptText = `
@@ -40,13 +39,15 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 12. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
 13. "ethics_approval": State ethics approval statement with reference number. If mentioned without number state "Mentioned without approval number". If absent, state "Not reported".
 14. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-15. "received_to_accepted_days": Integer number of days between received and accepted dates, or "Not reported".
-16. "accepted_to_published_days": Integer number of days between accepted and published dates, or "Not reported".
+15. "received_to_accepted_days": Integer number of days. If the received and accepted dates are the exact same day, you MUST output the number 0. If not reported, output "Not reported".
+16. "accepted_to_published_days": Integer number of days. If the accepted and published dates are the exact same day, you MUST output the number 0. If not reported, output "Not reported".
 17. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
 18. "funding": "Yes" or "No".
 19. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
 20. "tortured_phrases": List any tortured phrases (paraphrasing tool artifacts) identified in the text, separated by commas. If none, state "None".
 21. "hallucinated_references": Check reference list DOIs, titles, and journal details. List suspicious or non-existent references by number (e.g., "Ref 14 - Invalid DOI / Title mismatch"). If none found, state "None".
+22. "scopus": "Yes" or "No". Use the journal name and ISSN from the metadata to verify the journal's true indexing status in Scopus. Base this strictly on the journal-level indexing database, explicitly bypassing any article-level indexing lag.
+23. "embase": "Yes" or "No". Use the journal name and ISSN from the metadata to verify the journal's true indexing status in Embase. Base this strictly on the journal-level indexing database, explicitly bypassing any article-level indexing lag.
 `;
 
     const contents = [];
