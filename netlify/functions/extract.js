@@ -54,7 +54,26 @@ function calculateDaysBetweenISO(dateStr1, dateStr2) {
 
   const diffTime = d2.getTime() - d1.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 ? diffDays : "Not reported"; // Prevents negative days if dates are mixed up
+  return diffDays >= 0 ? diffDays : "Not reported"; 
+}
+
+// NEW: Helper function to scrape the publisher's website text via the DOI
+async function fetchWebsiteText(doi) {
+  if (!doi) return "No DOI provided for website scraping.";
+  try {
+    const res = await fetch(`https://doi.org/${doi}`);
+    const html = await res.text();
+    // Strip HTML tags to get raw text for the AI to read
+    const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                     .replace(/<[^>]+>/g, ' ')
+                     .replace(/\s+/g, ' ')
+                     .trim();
+    // Return the first 15,000 characters to capture sidebar info without overloading the prompt
+    return text.substring(0, 15000);
+  } catch (e) {
+    return "Failed to fetch website context.";
+  }
 }
 
 exports.handler = async (event, context) => {
@@ -71,6 +90,12 @@ exports.handler = async (event, context) => {
         statusCode: 500,
         body: JSON.stringify({ error: 'Server missing GEMINI_API_KEY configuration.' })
       };
+    }
+
+    // --- FETCH LIVE WEBSITE TEXT ---
+    let websiteContext = "Not available";
+    if (doi) {
+      websiteContext = await fetchWebsiteText(doi);
     }
 
     // --- EXTRACT CROSSREF DATES FOR BACKUP ---
@@ -105,11 +130,14 @@ exports.handler = async (event, context) => {
 
     const promptText = `
 You are an expert research integrity auditor and bibliometrician specializing in dental/stomatology literature.
-Analyze the attached manuscript PDF along with the CrossRef metadata provided below.
+Analyze the attached manuscript PDF along with the CrossRef metadata and the scraped Website Context provided below.
 
 CrossRef Metadata:
 ${JSON.stringify(crossrefData || {})}
 Note: CrossRef official database publication date is strictly: ${crossrefPubDate}
+
+Publisher Website Scraped Text:
+${websiteContext}
 
 Extract and audit the following fields. Provide response strictly as JSON with key-value pairs matching these exact keys:
 
@@ -127,9 +155,9 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 12. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
 13. "ethics_approval": State ethics approval statement with reference number. If mentioned without number state "Mentioned without approval number". If absent, state "Not reported".
 14. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-15. "received_date_iso": Search the manuscript for the exact "Received" or "Submitted" date. You MUST format this date strictly as YYYY-MM-DD (e.g., 2023-05-14). If the day is missing, use 01. If the date is completely missing, output "Not reported".
-16. "accepted_date_iso": Search the manuscript for the exact "Accepted", "Revised", or "Approved" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
-17. "published_date_iso": Search the manuscript AND the CrossRef official database publication date for the "Published" or "Available online" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
+15. "received_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Received" or "Submitted" date. You MUST format this date strictly as YYYY-MM-DD (e.g., 2023-05-14). If the day is missing, use 01. If the date is completely missing, output "Not reported".
+16. "accepted_date_iso": Search the PDF manuscript, the CrossRef metadata, AND the Publisher Website Scraped Text for the exact "Accepted", "Revised", or "Approved" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
+17. "published_date_iso": Search the PDF manuscript, the Publisher Website Scraped Text, AND the CrossRef official database publication date for the "Published" or "Available online" date. You MUST format this date strictly as YYYY-MM-DD. If missing, output "Not reported".
 18. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
 19. "funding": "Yes" or "No".
 20. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
