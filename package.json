@@ -1,0 +1,10 @@
+{
+  "name": "PQRS",
+  "version": "1.0.0",
+  "description": "Probing the Quality of Research in Stomatology",
+  "main": "index.html",
+  "dependencies": {
+    "@netlify/functions": "^2.6.0",
+    "node-fetch": "^3.3.2"
+  }
+}

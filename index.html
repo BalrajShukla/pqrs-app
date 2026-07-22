@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PQRS: Probing the Quality of Research in Stomatology</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <h1>PQRS</h1>
+        <p class="subtitle">Probing the Quality of Research in Stomatology</p>
+      </div>
+      <button id="themeToggle" class="theme-btn" aria-label="Toggle Theme">
+        <span id="themeIcon">🌙</span> <span id="themeLabel">Dark Mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Input Control Bar -->
+    <section class="control-card">
+      <div class="control-grid">
+        
+        <!-- Mode Switcher -->
+        <div class="input-group">
+          <label for="modeSelect">Processing Mode</label>
+          <select id="modeSelect">
+            <option value="single">Single Manuscript</option>
+            <option value="batch">Batch Processing (CSV/Multi-PDF)</option>
+          </select>
+        </div>
+
+        <!-- Single Mode DOI Input -->
+        <div class="input-group" id="doiGroup">
+          <label for="doiInput">DOI Number</label>
+          <input type="text" id="doiInput" placeholder="e.g. 10.1016/j.jdent.2023.104500">
+        </div>
+
+        <!-- File Upload (Single PDF or Batch CSV + PDFs) -->
+        <div class="input-group">
+          <label for="fileInput" id="fileLabel">Upload Manuscript PDF</label>
+          <input type="file" id="fileInput" accept=".pdf,.csv" multiple>
+        </div>
+
+        <!-- Action Button -->
+        <div class="input-group btn-group">
+          <button id="runBtn" class="btn-primary">
+            <span id="btnText">Run Extraction</span>
+            <div id="btnSpinner" class="spinner hidden"></div>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Batch Details Info -->
+      <div id="batchInfo" class="batch-info hidden">
+        <p>💡 <strong>Batch Mode Instructions:</strong> Upload a <code>.csv</code> file containing a column titled <code>doi</code> and/or upload multiple <code>.pdf</code> files matching your DOIs. Processing runs sequentially to adhere to API limits.</p>
+      </div>
+
+      <div id="statusMessage" class="status-msg hidden"></div>
+    </section>
+
+    <!-- Results Section -->
+    <section class="results-card">
+      <div class="results-header">
+        <h2>Extracted Quality Metrics</h2>
+        <button id="exportCsvBtn" class="btn-secondary" disabled>Download CSV</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>DOI</th>
+              <th>ISSN (p / e)</th>
+              <th>Authors</th>
+              <th>Affil. Dept</th>
+              <th>Affil. College</th>
+              <th>Affil. University</th>
+              <th>Affil. City</th>
+              <th>Affil. Country</th>
+              <th>ORCID IDs</th>
+              <th>Publisher</th>
+              <th>Publisher Country</th>
+              <th>Special Issue</th>
+              <th>Study Design</th>
+              <th>Reporting Guidelines</th>
+              <th>Ethics Approval</th>
+              <th>Trial Reg.</th>
+              <th>Rec to Acc (Days)</th>
+              <th>Acc to Pub (Days)</th>
+              <th>CRediT Taxonomy</th>
+              <th>Funding</th>
+              <th>Self-Citation %</th>
+              <th>Tortured Phrases</th>
+              <th>Hallucinated Refs</th>
+              <th>PubMed</th>
+              <th>PMC</th>
+              <th>MEDLINE</th>
+              <th>Scopus</th>
+              <th>Embase</th>
+              <th>DOAJ</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr class="empty-row">
+              <td colspan="29">No data extracted yet. Enter a DOI and upload a PDF to begin.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
