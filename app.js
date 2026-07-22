@@ -50,17 +50,25 @@ runBtn.addEventListener('click', async () => {
   
   try {
     if (mode === 'single') {
-      const doi = doiInput.value.trim().replace(/\s+/g, '');
+      let rawDoi = doiInput.value;
+      let cleanDoi = "";
+      
+      // Strict Regular Expression to extract only the 10.xxxx/... portion
+      if (rawDoi) {
+        const doiMatch = rawDoi.match(/(10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+)/);
+        cleanDoi = doiMatch ? doiMatch[0].replace(/\/+$/, '') : "";
+      }
+
       const file = fileInput.files[0];
       
-      if (!doi && !file) {
-        alert('Please provide at least a DOI or a PDF file.');
+      if (!cleanDoi && !file) {
+        alert('Please provide a valid DOI or a PDF file.');
         setLoading(false);
         return;
       }
 
       updateStatus('Processing manuscript...');
-      const record = await processItem(doi, file);
+      const record = await processItem(cleanDoi, file);
       addRecordToTable(record);
     } else {
       // Batch Mode
@@ -95,8 +103,6 @@ runBtn.addEventListener('click', async () => {
         } catch (err) {
           console.error(`Error processing item ${i}:`, err);
         }
-
-        // Sequential delay (2 seconds) to protect rate limits
         if (i < itemsToProcess.length - 1) {
           await new Promise(res => setTimeout(res, 2000));
         }
@@ -181,8 +187,8 @@ async function processItem(doi, file) {
     reporting_guidelines: aiResult.reporting_guidelines || 'Not reported',
     ethics_approval: aiResult.ethics_approval || 'Not reported',
     trial_registration: aiResult.trial_registration || 'Not applicable',
-    received_to_accepted_days: aiResult.received_to_accepted_days || 'Not reported',
-    accepted_to_published_days: aiResult.accepted_to_published_days || 'Not reported',
+    received_to_accepted_days: (aiResult.received_to_accepted_days !== undefined && aiResult.received_to_accepted_days !== null) ? aiResult.received_to_accepted_days : 'Not reported',
+    accepted_to_published_days: (aiResult.accepted_to_published_days !== undefined && aiResult.accepted_to_published_days !== null) ? aiResult.accepted_to_published_days : 'Not reported',
     credit_taxonomy: aiResult.credit_taxonomy || 'Not reported',
     funding: aiResult.funding || 'No',
     journal_self_citation_percentage: aiResult.journal_self_citation_percentage || '0%',
@@ -191,8 +197,8 @@ async function processItem(doi, file) {
     pubmed: pubMedStatus.pubmed ? 'Yes' : 'No',
     pmc: pubMedStatus.pmc ? 'Yes' : 'No',
     medline: pubMedStatus.medline ? 'Yes' : 'No',
-    scopus: 'Checked via ISSN (See PDF/CrossRef)', // Heuristic flag or ISSN route
-    embase: 'Checked via ISSN (See PDF/CrossRef)', 
+    scopus: aiResult.scopus || 'No',
+    embase: aiResult.embase || 'No',
     doaj: doajStatus ? 'Yes' : 'No'
   };
 
@@ -203,13 +209,18 @@ async function processItem(doi, file) {
 async function checkPubMedIndexing(query) {
   if (!query) return { pubmed: false, pmc: false, medline: false };
   try {
-    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json`;
+    // Explicitly dropping json format to parse the native XML <Count> tag
+    const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}`;
     const res = await fetch(url);
-    const data = await res.json();
-    const count = parseInt(data.esearchresult?.count || '0');
+    const xmlText = await res.text();
+    
+    // Strict Regex for PubMed XML Count tag
+    const countMatch = xmlText.match(/<Count>(\d+)<\/Count>/);
+    const count = countMatch ? parseInt(countMatch[1], 10) : 0;
+    
     return {
       pubmed: count > 0,
-      pmc: count > 0, // General indexing indication
+      pmc: count > 0,
       medline: count > 0
     };
   } catch {
@@ -242,8 +253,8 @@ function parseCsvDois(csvText) {
   const lines = csvText.split('\n');
   const dois = [];
   lines.forEach(line => {
-    const match = line.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
-    if (match) dois.push(match[0]);
+    const match = line.match(/(10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+)/);
+    if (match) dois.push(match[0].replace(/\/+$/, ''));
   });
   return [...new Set(dois)];
 }
