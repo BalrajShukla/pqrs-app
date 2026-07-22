@@ -188,6 +188,7 @@ async function processItem(doi, file) {
     reporting_guidelines: aiResult.reporting_guidelines || 'Not reported',
     ethics_approval: aiResult.ethics_approval || 'Not reported',
     trial_registration: aiResult.trial_registration || 'Not applicable',
+    protocol_registration: aiResult.protocol_registration || 'Not reported',
     received_to_accepted_days: (aiResult.received_to_accepted_days !== undefined && aiResult.received_to_accepted_days !== null) ? aiResult.received_to_accepted_days : 'Not reported',
     accepted_to_published_days: (aiResult.accepted_to_published_days !== undefined && aiResult.accepted_to_published_days !== null) ? aiResult.accepted_to_published_days : 'Not reported',
     scientific_syntax: aiResult.scientific_syntax || 'Not evaluated',
@@ -195,9 +196,9 @@ async function processItem(doi, file) {
     journal_self_citation_percentage: aiResult.journal_self_citation_percentage || '0%',
     tortured_phrases: aiResult.tortured_phrases || 'None',
     hallucinated_references: aiResult.hallucinated_references || 'None',
-    pubmed: aiResult.pubmed || 'No', // Pulled strictly from OpenAlex PMID in backend
-    pmc: aiResult.pmc || 'No',       // Pulled strictly from OpenAlex PMCID in backend
-    medline: medlineStatus ? 'Yes' : 'No', // Strict DOI search
+    pubmed: aiResult.pubmed || 'No', 
+    pmc: aiResult.pmc || 'No',       
+    medline: medlineStatus ? 'Yes' : 'No', 
     scopus: aiResult.scopus || 'No',
     embase: aiResult.embase || 'No',
     doaj: doajStatus ? 'Yes' : 'No'
@@ -210,7 +211,6 @@ async function processItem(doi, file) {
 async function checkStrictMedline(doi) {
   if (!doi) return false;
   try {
-    // Uses [doi] and medline[sb] to strictly check if the article itself is in the MEDLINE subset
     const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(doi)}[doi]+AND+medline[sb]&retmode=json`;
     const res = await fetch(url);
     const data = await res.json();
@@ -278,6 +278,7 @@ function addRecordToTable(record) {
     <td>${record.reporting_guidelines}</td>
     <td>${record.ethics_approval}</td>
     <td>${record.trial_registration}</td>
+    <td>${record.protocol_registration}</td>
     <td>${record.received_to_accepted_days}</td>
     <td>${record.accepted_to_published_days}</td>
     <td>${record.scientific_syntax}</td>
@@ -295,7 +296,6 @@ function addRecordToTable(record) {
   resultsBody.appendChild(tr);
   exportCsvBtn.disabled = false;
 }
-
 // Export CSV Handler
 exportCsvBtn.addEventListener('click', () => {
   if (extractedRecords.length === 0) return;
