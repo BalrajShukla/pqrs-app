@@ -100,8 +100,8 @@ Extract and audit the following fields. Provide response strictly as JSON with k
 12. "reporting_guidelines": State if reporting guidelines (e.g., CONSORT, PRISMA, STROBE) were reported AND if actually followed correctly (e.g., "Reported and Followed", "Reported but Not Followed", or "Not Reported").
 13. "ethics_approval": State ethics approval statement with reference number. If mentioned without number state "Mentioned without approval number". If absent, state "Not reported".
 14. "trial_registration": Mandatory for human/in vivo interventions. Mention registration number/registry. If non-human study, state "Not applicable". If clinical study without trial ID, state "Not reported".
-15. "received_to_accepted_days": Integer number of days. If the received and accepted dates are the exact same day, you MUST output the number 0. If not reported, output "Not reported".
-16. "accepted_to_published_days": Integer number of days. If the accepted and published dates are the exact same day, you MUST output the number 0. If not reported, output "Not reported".
+15. "received_to_accepted_days": First, explicitly locate the "Received" date and "Accepted" date printed in the manuscript. You MUST mathematically calculate the exact number of days between these two dates. Output ONLY the calculated integer (e.g., 28). If they are the exact same day, output 0. If either date is missing, output "Not reported".
+16. "accepted_to_published_days": First, explicitly locate the "Accepted" date and the "Published" (or "Available online") date in the manuscript. You MUST mathematically calculate the exact number of days between these two dates. Output ONLY the calculated integer. If they are the exact same day, output 0. If either date is missing, output "Not reported".
 17. "credit_taxonomy": CRediT roles statement if reported, else "Not reported".
 18. "funding": "Yes" or "No".
 19. "journal_self_citation_percentage": Estimated percentage of references in this paper citing the publishing journal itself.
